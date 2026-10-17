@@ -5,7 +5,11 @@ from rl_agent_api import RLAgent
 
 model_dir = Path(__file__).resolve().parent
 
-device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")  # Use MPS if available, otherwise CPU
+device = torch.device(
+    "mps" if torch.backends.mps.is_available() else
+    "cuda" if torch.cuda.is_available() else
+    "cpu"
+)
 
 model = RLAgent(model_dir=model_dir, device=device)  # or "cpu"
 
