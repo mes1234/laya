@@ -1,6 +1,8 @@
 from pathlib import Path
 
 import torch
+from safetensors.torch import load_file
+from machine_condition import CORRECT_TO_CRITERION, QUESTION_ID, QUESTIONS, load_records
 from rl_agent_api import RLAgent
 
 model_dir = Path(__file__).resolve().parent
@@ -11,32 +13,21 @@ device = torch.device(
     "cpu"
 )
 
-model = RLAgent(model_dir=model_dir, device=device)  # or "cpu"
+model = RLAgent(model_dir=model_dir, device=device, model="trained.safetensors")  # or "cpu"
 
 print("Model loaded successfully.")
 
-# Assume the user already told us their mood
-mood = "tired and relaxed"
+records = load_records(model_dir / "data.json")
+matches = 0
+for record in records:
+    answer = model.system_one(state=record["story"], questions=QUESTIONS)
+    predicted = answer["answers"][QUESTION_ID]["choice"]
+    expected = CORRECT_TO_CRITERION[record["correct"]]
+    matched = predicted == expected
+    matches += matched
+    print(f"{'OK  ' if matched else 'FAIL'} predicted={predicted!r} correct={expected!r} state={record['story']!r}\n\n")
 
-state = (
-    f"The user says: 'I feel {mood}. "
-    "I want to know what to do this evening.'"
-)
-
-questions = {
-    "evening_activity": {
-        "type": "choice",  # "choice" | "score" | "noul"
-        "instructions": (
-            "Based on the user's mood, choose the best evening activity "
-            "from the given options."
-        ),
-        "criteria": ["gym", "sleep", "watch tv"]
-    }
-}
-for i in range(300):
-    for mood in ["tired and relaxed", "stressed and energetic", "bored and lazy"]:
-        state = (
-            f"The user says: 'I feel {mood}. "
-            "I want to know what to do this evening.'"
-        )
-        print(model.system_one(state=state, questions=questions))
+if records:
+    print(f"Matched {matches}/{len(records)} ({matches / len(records):.0%})")
+else:
+    print("data.json has no records.")

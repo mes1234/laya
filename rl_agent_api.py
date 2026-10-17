@@ -11,7 +11,7 @@ from rl_common import (QTYPES, amp_dtype, build_model, build_sequence, collate_i
 
 
 class RLAgent:
-    def __init__(self, model_dir, device=None):
+    def __init__(self, model_dir, device=None, model="model.safetensors"):
         from safetensors.torch import load_file
         from transformers import AutoTokenizer
         with open(os.path.join(model_dir, "rl_agent_config.json")) as f:
@@ -19,7 +19,7 @@ class RLAgent:
         self.device = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
         self.tok = AutoTokenizer.from_pretrained(os.path.join(model_dir, "tokenizer"))
         self.model = build_model(self.cfg, encoder_dir=os.path.join(model_dir, "encoder"))
-        self.model.load_state_dict(load_file(os.path.join(model_dir, "model.safetensors")), strict=True)
+        self.model.load_state_dict(load_file(os.path.join(model_dir, model)), strict=True)
         self.model.to(self.device).eval()
         self.model.encoder.config.reference_compile = False  # torch.compile is a loss on small batches / few SMs (T4)
         self.temperature = self.cfg.get("temperature", [1.0, 1.0, 1.0])
