@@ -24,7 +24,7 @@ class RLAgent:
                 metadata = checkpoint.metadata() or {}
             if metadata.get("encoder") != self.cfg["encoder"]:
                 raise ValueError(
-                    "Checkpoint %r is not a SciBERT-compatible checkpoint for encoder %r; "
+                    "Checkpoint %r is not compatible with encoder %r; "
                     "retrain the model with trainer.py."
                     % (model, self.cfg["encoder"])
                 )

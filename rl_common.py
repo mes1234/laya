@@ -127,11 +127,13 @@ class DecisionModel(nn.Module):
 def build_model(cfg: Dict, load_pretrained_encoder: bool = True) -> DecisionModel:
     from transformers import AutoConfig, AutoModel
     encoder_name = cfg.get("encoder", "allenai/scibert_scivocab_uncased")
+    # DeBERTa-v2/v3 has no SDPA path (disentangled attention), so use the library default for it.
+    attn = {} if "deberta" in encoder_name.lower() else {"attn_implementation": "sdpa"}
     if load_pretrained_encoder:
-        enc = AutoModel.from_pretrained(encoder_name, attn_implementation="sdpa")
+        enc = AutoModel.from_pretrained(encoder_name, **attn)
     else:
         encoder_config = AutoConfig.from_pretrained(encoder_name)
-        enc = AutoModel.from_config(encoder_config, attn_implementation="sdpa")
+        enc = AutoModel.from_config(encoder_config, **attn)
 
     return DecisionModel(enc, cfg["head_layers"], len(cfg["act_costs"]) + 1)
 
