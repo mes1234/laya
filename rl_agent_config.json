@@ -1,8 +1,8 @@
 {
-  "encoder": "answerdotai/ModernBERT-large",
+  "encoder": "allenai/scibert_scivocab_uncased",
   "head_layers": 2,
   "max_len": 512,
-  "head_max_len": 192,
+  "head_max_len": 128,
   "max_prefixes": 6,
   "act_costs": {
     "escalate": 0.5

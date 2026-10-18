@@ -124,13 +124,15 @@ class DecisionModel(nn.Module):
         return logits, act_logits
 
 
-def build_model(cfg: Dict, encoder_dir: Optional[str] = None) -> DecisionModel:
+def build_model(cfg: Dict, load_pretrained_encoder: bool = True) -> DecisionModel:
     from transformers import AutoConfig, AutoModel
-    if encoder_dir:  # offline: architecture only, weights come from the saved state dict
-        ecfg = AutoConfig.from_pretrained(encoder_dir)
-        enc = AutoModel.from_config(ecfg, attn_implementation="sdpa")
+    encoder_name = cfg.get("encoder", "allenai/scibert_scivocab_uncased")
+    if load_pretrained_encoder:
+        enc = AutoModel.from_pretrained(encoder_name, attn_implementation="sdpa")
     else:
-        enc = AutoModel.from_pretrained(cfg["encoder"], attn_implementation="sdpa")
+        encoder_config = AutoConfig.from_pretrained(encoder_name)
+        enc = AutoModel.from_config(encoder_config, attn_implementation="sdpa")
+
     return DecisionModel(enc, cfg["head_layers"], len(cfg["act_costs"]) + 1)
 
 

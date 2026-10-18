@@ -280,7 +280,7 @@ device = torch.device(
     "cpu"
 )
 
-model = RLAgent(model_dir=model_dir, device=device)
+model = RLAgent(model_dir=model_dir, device=device, load_checkpoint=False)
 
 training_rows = load_records(model_dir / "data_train.json")
 if not training_rows:
@@ -307,7 +307,12 @@ finally:
     writer.close()
 
 output_path = model_dir / "trained.safetensors"
-save_file(best_state, str(output_path), metadata={"format": "pt"})
+save_file(
+    best_state,
+    str(output_path),
+    metadata={"format": "pt", "encoder": model.cfg["encoder"]},
+)
+model.tok.save_pretrained(model_dir / "tokenizer")
 metric = "val_loss" if verification_rows else "train_loss"
 print(
     f"Saved best model (epoch {best_info['epoch']}, {metric}={best_info['loss']:.4f}) to {output_path}"

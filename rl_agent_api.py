@@ -11,15 +11,29 @@ from rl_common import (QTYPES, amp_dtype, build_model, build_sequence, collate_i
 
 
 class RLAgent:
-    def __init__(self, model_dir, device=None, model="model.safetensors"):
+    def __init__(self, model_dir, device=None, model="trained.safetensors", load_checkpoint=True):
+        from safetensors import safe_open
         from safetensors.torch import load_file
         from transformers import AutoTokenizer
         with open(os.path.join(model_dir, "rl_agent_config.json")) as f:
             self.cfg = json.load(f)
         self.device = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
-        self.tok = AutoTokenizer.from_pretrained(os.path.join(model_dir, "tokenizer"))
-        self.model = build_model(self.cfg, encoder_dir=os.path.join(model_dir, "encoder"))
-        self.model.load_state_dict(load_file(os.path.join(model_dir, model)), strict=True)
+        if load_checkpoint:
+            checkpoint_path = os.path.join(model_dir, model)
+            with safe_open(checkpoint_path, framework="pt", device="cpu") as checkpoint:
+                metadata = checkpoint.metadata() or {}
+            if metadata.get("encoder") != self.cfg["encoder"]:
+                raise ValueError(
+                    "Checkpoint %r is not a SciBERT-compatible checkpoint for encoder %r; "
+                    "retrain the model with trainer.py."
+                    % (model, self.cfg["encoder"])
+                )
+            self.tok = AutoTokenizer.from_pretrained(os.path.join(model_dir, "tokenizer"))
+            self.model = build_model(self.cfg, load_pretrained_encoder=False)
+            self.model.load_state_dict(load_file(checkpoint_path), strict=True)
+        else:
+            self.tok = AutoTokenizer.from_pretrained(self.cfg["encoder"])
+            self.model = build_model(self.cfg, load_pretrained_encoder=True)
         self.model.to(self.device).eval()
         self.model.encoder.config.reference_compile = False  # torch.compile is a loss on small batches / few SMs (T4)
         self.temperature = self.cfg.get("temperature", [1.0, 1.0, 1.0])
