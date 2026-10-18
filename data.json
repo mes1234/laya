@@ -1,5 +1,5 @@
 {"story": "Machine is Interactive machine of size Medium of type Motor AC;Noise level is Low;Trend standard deviation is Low;Crest factor is Low", "correct": "Normal"}
-{"story": "Machine is Interactive machine of size Medium of type Motor AC;Noise level is Mid;Trend standard deviation is Low;Crest factor is Low", "correct": "Noisy"}
+{"story": "Machine is Interactive machine of size Medium of type Motor AC;Noise level is Mid;Trend standard deviation is Low;Crest factor is Low", "correct": "Normal"}
 {"story": "Machine is Interactive machine of size Medium of type Motor AC;Noise level is Low;Moderate correlated peak near Gear Fault;Trend standard deviation is Low;Crest factor is Low", "correct": "Gear"}
 {"story": "Machine is Interactive machine of size Medium of type Motor AC;Noise level is Low;High correlated peak near Bearing Fault;Moderate correlated peak near Gear Fault;Trend standard deviation is Low;Crest factor is Low", "correct": "Bearing"}
 {"story": "Machine is Interactive machine of size Large of type Motor AC;Noise level is High;Trend standard deviation is Low;Crest factor is Mid", "correct": "Noisy"}
@@ -61,7 +61,7 @@
 {"story": "Machine is Interactive machine of size Medium of type Motor AC;Noise level is Mid;Moderate correlated peak near Gear Fault;Trend standard deviation is Low;Crest factor is Low", "correct": "Gear"}
 {"story": "Machine is Interactive machine of size Medium of type Motor AC;Noise level is Mid;High correlated peak near Gear Fault;Trend standard deviation is Low;Crest factor is Low", "correct": "Gear"}
 {"story": "Machine is Interactive machine of size Medium of type Motor AC;Noise level is Mid;High correlated peak near Gear Fault;Trend standard deviation is Low;Crest factor is Low", "correct": "Gear"}
-{"story": "Machine is Interactive machine of size Medium of type Motor AC;Noise level is Mid;Trend standard deviation is Low;Crest factor is Low", "correct": "Noisy"}
+{"story": "Machine is Interactive machine of size Medium of type Motor AC;Noise level is Mid;Trend standard deviation is Low;Crest factor is Low", "correct": "Normal"}
 {"story": "Machine is Interactive machine of size Medium of type Motor AC;Noise level is Low;Trend standard deviation is Low;Crest factor is Low", "correct": "Normal"}
 {"story": "Machine is Interactive machine of size Medium of type Motor AC;Noise level is Low;High correlated peak near Bearing Fault;Trend standard deviation is Low;Crest factor is Low", "correct": "Bearing"}
 {"story": "Machine is Interactive machine of size Medium of type Motor AC;Noise level is Low;High correlated peak near Bearing Fault;Trend standard deviation is Low;Crest factor is Low", "correct": "Bearing"}
@@ -74,12 +74,12 @@
 {"story": "Machine is Interactive machine of size Medium of type Motor AC;Noise level is Low;Moderate correlated peak near Bearing Fault;Trend standard deviation is Mid;Crest factor is Low", "correct": "Bearing"}
 {"story": "Machine is Interactive machine of size Large of type Motor AC;Noise level is High;Trend standard deviation is Mid;Crest factor is Mid", "correct": "Noisy"}
 {"story": "Machine is Interactive machine of size Medium of type Motor AC;Noise level is Mid;Trend standard deviation is Low;Crest factor is Low", "correct": "Normal"}
-{"story": "Machine is Interactive machine of size Medium of type Motor AC;Noise level is High;Trend standard deviation is Low;Crest factor is Mid", "correct": "Normal"}
+{"story": "Machine is Interactive machine of size Medium of type Motor AC;Noise level is High;Trend standard deviation is Low;Crest factor is Mid", "correct": "Noisy"}
 {"story": "Machine is Interactive machine of size Medium of type Motor AC;Noise level is High;Trend standard deviation is Low;Crest factor is Mid", "correct": "Noisy"}
 {"story": "Machine is Interactive machine of size Medium of type Motor AC;Noise level is High;Trend standard deviation is Low;Crest factor is Mid", "correct": "Noisy"}
 {"story": "Machine is Interactive machine of size Medium of type Motor AC;Noise level is High;Trend standard deviation is Low;Crest factor is Mid", "correct": "Noisy"}
 {"story": "Machine is Interactive machine of size Medium of type Motor AC;Noise level is Mid;Trend standard deviation is Low;Crest factor is Low", "correct": "Normal"}
-{"story": "Machine is Interactive machine of size Medium of type Motor AC;Noise level is Low;Moderate correlated peak near Gear Fault;Trend standard deviation is Low;Crest factor is Low", "correct": "Normal"}
+{"story": "Machine is Interactive machine of size Medium of type Motor AC;Noise level is Low;Moderate correlated peak near Gear Fault;Trend standard deviation is Low;Crest factor is Low", "correct": "Gear"}
 {"story": "Machine is Interactive machine of size Medium of type Motor AC;Noise level is Low;High correlated peak near Gear Fault;Trend standard deviation is Low;Crest factor is Low", "correct": "Gear"}
 {"story": "Machine is Interactive machine of size Medium of type Motor AC;Noise level is Low;High correlated peak near Gear Fault;Trend standard deviation is Mid;Crest factor is Low", "correct": "Gear"}
 {"story": "Machine is Interactive machine of size Medium of type Motor AC;Noise level is Low;High correlated peak near Gear Fault;Trend standard deviation is Mid;Crest factor is Low", "correct": "Gear"}

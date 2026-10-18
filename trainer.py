@@ -1,3 +1,4 @@
+import random
 from datetime import datetime
 from pathlib import Path
 
@@ -12,8 +13,11 @@ from rl_agent_api import RLAgent, build_sequence, collate_items, QTYPES
 
 
 class MachineConditionTrainingObject:
-    def __init__(self, rows):
+    def __init__(self, rows, shuffle=True, seed=None):
         self.rows = rows
+        self.shuffle = shuffle
+        self.random = random.Random(seed)
+        self.order = list(range(len(rows)))
         self.index = 0
 
     def has_next(self):
@@ -21,47 +25,71 @@ class MachineConditionTrainingObject:
 
     def reset(self):
         self.index = 0
+        if self.shuffle:
+            self.random.shuffle(self.order)
 
-    def fetch(self):
+    def fetch_batch(self, size):
         if not self.has_next():
             raise StopIteration
-        row = self.rows[self.index]
-        self.index += 1
-        return {
-            "state": row["story"],
-            "label": CORRECT_TO_CRITERION[row["correct"]],
-        }
+        indices = self.order[self.index:self.index + size]
+        self.index += len(indices)
+        return [
+            {
+                "state": self.rows[i]["story"],
+                "label": CORRECT_TO_CRITERION[self.rows[i]["correct"]],
+            }
+            for i in indices
+        ]
 
 
-def encode_example(model, state, label):
+def encode_batch(model, examples):
+    """Pad a list of {"state", "label"} dicts into one model batch and its target tensor."""
     q = model._to_internal(QUESTIONS[QUESTION_ID])
-    seq, markers = build_sequence(
-        model.tok,
-        state,
-        q,
-        model.cfg["max_len"],
-        model.cfg["head_max_len"],
+    items = []
+    for example in examples:
+        seq, markers = build_sequence(
+            model.tok,
+            example["state"],
+            q,
+            model.cfg["max_len"],
+            model.cfg["head_max_len"],
+        )
+        items.append(
+            {
+                "ids": seq,
+                "markers": markers,
+                "qtype": QTYPES["choice"],
+                "target": [0.0] * len(markers),
+                "label": CRITERIA.index(example["label"]),
+                "episode": 0,
+                "ep_step": 0,
+                "ep_len": 1,
+                "src": "train",
+            }
+        )
+
+    batch = collate_items([items], model.tok.pad_token_id)
+    target = torch.tensor(
+        [CRITERIA.index(example["label"]) for example in examples],
+        dtype=torch.long,
+        device=model.device,
     )
-
-    item = {
-        "ids": seq,
-        "markers": markers,
-        "qtype": QTYPES["choice"],
-        "target": [0.0] * len(markers),
-        "label": CRITERIA.index(label),
-        "episode": 0,
-        "ep_step": 0,
-        "ep_len": 1,
-        "src": "train",
-    }
-
-    batch = collate_items([[item]], model.tok.pad_token_id)
-    target = torch.tensor([CRITERIA.index(label)], dtype=torch.long, device=model.device)
 
     return {
         k: (v.to(model.device) if isinstance(v, torch.Tensor) else v)
         for k, v in batch.items()
     }, target
+
+
+def forward_batch(model, batch):
+    logits, _ = model.model(
+        batch["input_ids"],
+        batch["attention_mask"],
+        batch["marker_pos"],
+        batch["marker_mask"],
+        batch["qtype"],
+    )
+    return logits
 
 
 def set_train_mode(model):
@@ -70,7 +98,7 @@ def set_train_mode(model):
     model.model.encoder.eval()
 
 
-def evaluate(model, rows):
+def evaluate(model, rows, batch_size=8):
     """Loss, accuracy, per-class recall, confusion matrix and wrong stories."""
     model.model.eval()
     size = len(CRITERIA)
@@ -78,22 +106,21 @@ def evaluate(model, rows):
     wrong = []
     total_loss = 0.0
     with torch.no_grad():
-        for row in rows:
-            label = CORRECT_TO_CRITERION[row["correct"]]
-            batch, target = encode_example(model, row["story"], label)
-            logits, _ = model.model(
-                batch["input_ids"],
-                batch["attention_mask"],
-                batch["marker_pos"],
-                batch["marker_mask"],
-                batch["qtype"],
-            )
-            total_loss += F.cross_entropy(logits, target).item()
-            predicted = int(logits.argmax(dim=-1).item())
-            actual = int(target.item())
-            confusion[actual, predicted] += 1
-            if predicted != actual:
-                wrong.append((row["story"], CRITERIA[actual], CRITERIA[predicted]))
+        for start in range(0, len(rows), batch_size):
+            chunk = rows[start:start + batch_size]
+            examples = [
+                {"state": row["story"], "label": CORRECT_TO_CRITERION[row["correct"]]}
+                for row in chunk
+            ]
+            batch, target = encode_batch(model, examples)
+            logits = forward_batch(model, batch)
+            total_loss += F.cross_entropy(logits, target, reduction="sum").item()
+            for example, actual, predicted in zip(
+                examples, target.tolist(), logits.argmax(dim=-1).tolist()
+            ):
+                confusion[actual, predicted] += 1
+                if predicted != actual:
+                    wrong.append((example["state"], CRITERIA[actual], CRITERIA[predicted]))
     set_train_mode(model)
 
     count = max(1, len(rows))
@@ -135,6 +162,14 @@ def format_wrong(wrong):
     )
 
 
+def clone_state_dict(model):
+    # Clone to CPU so tied/shared tensors don't break safetensors serialization.
+    return {
+        name: tensor.detach().cpu().clone().contiguous()
+        for name, tensor in model.model.state_dict().items()
+    }
+
+
 def train_rl_agent(
     model,
     training_object,
@@ -143,7 +178,14 @@ def train_rl_agent(
     writer=None,
     validation_rows=None,
     confusion_every=10,
+    batch_size=8,
+    max_grad_norm=1.0,
 ):
+    """Train and return (model, best_state_dict, best_info).
+
+    The best epoch is the lowest validation loss, or the lowest training loss
+    when there are no validation rows.
+    """
     set_train_mode(model)
     # Keep the BERT encoder frozen: no gradient updates.
     for parameter in model.model.encoder.parameters():
@@ -152,50 +194,60 @@ def train_rl_agent(
         (p for p in model.model.parameters() if p.requires_grad), lr=lr
     )
 
+    trainable = [p for p in model.model.parameters() if p.requires_grad]
+    best_loss = float("inf")
+    best_state = None
+    best_info = {}
+
     for epoch in range(epochs):
         total_loss = 0.0
+        total_grad_norm = 0.0
         correct = 0
         count = 0
+        batches = 0
         train_wrong = []
 
         training_object.reset()
         while training_object.has_next():
-            row = training_object.fetch()
-            batch, target = encode_example(model, row["state"], row["label"])
+            examples = training_object.fetch_batch(batch_size)
+            batch, target = encode_batch(model, examples)
 
             optimizer.zero_grad(set_to_none=True)
 
-            logits, _ = model.model(
-                batch["input_ids"],
-                batch["attention_mask"],
-                batch["marker_pos"],
-                batch["marker_mask"],
-                batch["qtype"],
-            )
+            logits = forward_batch(model, batch)
 
             loss = F.cross_entropy(logits, target)
             loss.backward()
+            grad_norm = torch.nn.utils.clip_grad_norm_(trainable, max_grad_norm)
             optimizer.step()
 
-            total_loss += loss.item()
-            predicted = int(logits.argmax(dim=-1).item())
-            if predicted == int(target.item()):
-                correct += 1
-            else:
-                train_wrong.append((row["state"], row["label"], CRITERIA[predicted]))
-            count += 1
+            total_loss += loss.item() * len(examples)
+            total_grad_norm += float(grad_norm)
+            batches += 1
+            for example, actual, predicted in zip(
+                examples, target.tolist(), logits.argmax(dim=-1).tolist()
+            ):
+                if predicted == actual:
+                    correct += 1
+                else:
+                    train_wrong.append((example["state"], example["label"], CRITERIA[predicted]))
+            count += len(examples)
 
         mean_loss = total_loss / max(1, count)
         accuracy = correct / max(1, count)
+        mean_grad_norm = total_grad_norm / max(1, batches)
         step = epoch + 1
-        message = f"epoch={step} loss={mean_loss:.4f} accuracy={accuracy:.2%}"
+        message = f"epoch={step} loss={mean_loss:.4f} accuracy={accuracy:.2%} grad_norm={mean_grad_norm:.3f}"
+        selection_loss = mean_loss
         if writer is not None:
             writer.add_scalar("train/loss", mean_loss, step)
             writer.add_scalar("train/accuracy", accuracy, step)
+            writer.add_scalar("train/grad_norm", mean_grad_norm, step)
             writer.add_text("train/misclassified", format_wrong(train_wrong), step)
 
         if validation_rows:
-            result = evaluate(model, validation_rows)
+            result = evaluate(model, validation_rows, batch_size)
+            selection_loss = result["loss"]
             message += f" val_loss={result['loss']:.4f} val_accuracy={result['accuracy']:.2%}"
             if writer is not None:
                 writer.add_scalar("val/loss", result["loss"], step)
@@ -206,11 +258,19 @@ def train_rl_agent(
                 if step % confusion_every == 0 or step == epochs:
                     writer.add_figure("val/confusion_matrix", confusion_figure(result["confusion"]), step)
 
+        if selection_loss < best_loss:
+            best_loss = selection_loss
+            best_info = {"epoch": step, "loss": selection_loss}
+            best_state = clone_state_dict(model)
+            message += " *best*"
+            if writer is not None:
+                writer.add_scalar("best/epoch", step, step)
+
         if writer is not None:
             writer.flush()
         print(message)
 
-    return model
+    return model, best_state, best_info
 
 
 model_dir = Path(__file__).resolve().parent
@@ -231,18 +291,24 @@ verification_rows = load_records(verification_path) if verification_path.exists(
 if not verification_rows:
     print("No data_verification.json records found; skipping validation metrics.")
 
-training_object = MachineConditionTrainingObject(training_rows)
+training_object = MachineConditionTrainingObject(training_rows, seed=0)
 writer = SummaryWriter(log_dir=str(model_dir / "runs" / datetime.now().strftime("%Y%m%d-%H%M%S")))
 try:
-    model = train_rl_agent(model, training_object, epochs=100, writer=writer, validation_rows=verification_rows)
+    model, best_state, best_info = train_rl_agent(
+        model,
+        training_object,
+        epochs=100,
+        writer=writer,
+        validation_rows=verification_rows,
+        batch_size=8,
+        max_grad_norm=1.0,
+    )
 finally:
     writer.close()
 
-# Clone to CPU so tied/shared tensors don't break safetensors serialization.
-state_dict = {
-    name: tensor.detach().cpu().clone().contiguous()
-    for name, tensor in model.model.state_dict().items()
-}
 output_path = model_dir / "trained.safetensors"
-save_file(state_dict, str(output_path), metadata={"format": "pt"})
-print(f"Saved trained model to {output_path}")
+save_file(best_state, str(output_path), metadata={"format": "pt"})
+metric = "val_loss" if verification_rows else "train_loss"
+print(
+    f"Saved best model (epoch {best_info['epoch']}, {metric}={best_info['loss']:.4f}) to {output_path}"
+)

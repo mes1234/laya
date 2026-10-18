@@ -1,3 +1,4 @@
+import time
 from pathlib import Path
 
 import torch
@@ -13,15 +14,17 @@ device = torch.device(
     "cpu"
 )
 
-model = RLAgent(model_dir=model_dir, device=device, model="trained.safetensors")  # or "cpu"
+start_total = time.perf_counter()
+model = RLAgent(model_dir=model_dir, device="cpu", model="trained.safetensors")  # or "cpu"
+load_seconds = time.perf_counter() - start_total
 
-print("Model loaded successfully.")
+print(f"Model loaded successfully in {load_seconds:.1f}s.")
 
 records = load_records(model_dir / "data_verification.json")
 
 STORY_WIDTH = 40
 header = (
-    ["#", "Result", "Expected", "Predicted", "Confidence", "Act prob", "Tokens"]
+    ["#", "Result", "Expected", "Predicted", "Confidence", "Act prob", "Tokens", "Time"]
     + [f"P({c})" for c in CRITERIA]
     + ["Story"]
 )
@@ -29,7 +32,9 @@ rows = []
 matches = 0
 model_name = "-"
 for index, record in enumerate(records, start=1):
+    start = time.perf_counter()
     response = model.system_one(state=record["story"], questions=QUESTIONS)
+    elapsed = time.perf_counter() - start
     model_name = response["model"]
     answer = response["answers"][QUESTION_ID]
     predicted = answer["choice"]
@@ -48,6 +53,7 @@ for index, record in enumerate(records, start=1):
             f"{answer['confidence']:.2%}",
             f"{answer['rl_agent']['act_probability']:.2%}",
             str(response["usage"]["input_tokens"]),
+            f"{elapsed:.2f}s",
         ]
         + [f"{answer['probabilities'].get(c, 0.0):.2%}" for c in CRITERIA]
         + [story]
@@ -70,5 +76,11 @@ if records:
     print(f"Model: {model_name}   Question: {QUESTION_ID}")
     print_table(header, rows)
     print(f"Matched {matches}/{len(records)} ({matches / len(records):.0%})")
+    inference_seconds = time.perf_counter() - start_total - load_seconds
+    print(
+        f"Time: load {load_seconds:.1f}s, inference {inference_seconds:.1f}s "
+        f"({inference_seconds / len(records):.2f}s per record), "
+        f"total {time.perf_counter() - start_total:.1f}s"
+    )
 else:
     print("data_verification.json has no records.")
